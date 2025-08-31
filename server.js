@@ -8,6 +8,13 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// --- DEBUGGING ---
+console.log('DATABASE_URL found:', process.env.DATABASE_URL);
+// --- END DEBUGGING ---
+
+// Middleware
+app.use(cors());
+
 // Middleware
 app.use(cors());
 app.use(express.json());
