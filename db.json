@@ -1,0 +1,50 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "vinod",
+      "password": "mahiganga@1123"
+    }
+  ],
+  "vehicles": [
+    {
+      "name": "splendor",
+      "price": 50000,
+      "category": "bike",
+      "year": "2022",
+      "kilometers": "15000",
+      "fuelType": "Petrol",
+      "financeAvailable": true,
+      "images": [
+        "https://via.placeholder.com/600x400.png/cccccc/000000?text=No+Image"
+      ],
+      "id": 2
+    },
+    {
+      "name": "atul gemini",
+      "price": 150000,
+      "category": "auto-passenger",
+      "year": "2022",
+      "kilometers": "not specified",
+      "fuelType": "Petrol",
+      "financeAvailable": true,
+      "images": [
+        "https://via.placeholder.com/600x400.png/cccccc/000000?text=No+Image"
+      ],
+      "id": 3
+    },
+    {
+      "name": "honda activa",
+      "price": 50000,
+      "category": "scooty",
+      "year": "2020",
+      "kilometers": "15000",
+      "fuelType": "Petrol",
+      "financeAvailable": true,
+      "images": [
+        "https://via.placeholder.com/600x400.png/cccccc/000000?text=No+Image"
+      ],
+      "id": 4
+    }
+  ]
+}
