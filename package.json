@@ -5,7 +5,7 @@
   "description": "Backend API for the MAHIGANGA website.",
   "main": "server.js",
   "scripts": {
-"start": "node -r dotenv/config server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
