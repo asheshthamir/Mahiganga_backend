@@ -1,118 +1,107 @@
+require('dotenv').config(); // Reads the .env file from Render
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const cors = require('cors'); 
+const { Pool } = require('pg'); // PostgreSQL client
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware to parse JSON bodies
+// Database connection setup
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+// Middleware
+app.use(require('cors')());
 app.use(express.json());
-app.use(cors());
-// --- LOGIN ROUTE ---
-app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
-  const db = readDb();
-  const user = db.users.find(u => u.username === username && u.password === password);
-
-  if (user) {
-    // In a real app, we'd use a secure token (JWT). For simplicity, we'll send a success message.
-    res.json({ success: true, message: 'Login successful' });
-  } else {
-    res.status(401).json({ success: false, message: 'Invalid credentials' });
-  }
-});
-const dbPath = path.join(__dirname, 'db.json');
-// --- NEW ENDPOINT for Sell Requests (Saves to CSV) ---
-app.post('/api/sell-requests', (req, res) => {
-  const formData = req.body;
-  const csvPath = path.join(__dirname, 'sell_requests.csv');
-
-  // Define the order of columns for the CSV file
-  const headers = 'SellerName,PhoneNumber,Email,Location,VehicleCategory,BrandModel,Year,Kilometers,Condition,ExpectedPrice,Comments\n';
-  const row = `"${formData.sellerName}","${formData.sellerPhone}","${formData.sellerEmail}","${formData.sellerLocation}","${formData.sellCategory}","${formData.sellBrand}","${formData.sellYear}","${formData.sellKM}","${formData.sellCondition}","${formData.expectedPrice}","${formData.additionalComments}"\n`;
-
-  // If the file doesn't exist, create it and add the headers
-  if (!fs.existsSync(csvPath)) {
-    fs.writeFileSync(csvPath, headers);
-  }
-
-  // Append the new form data as a new row
-  fs.appendFileSync(csvPath, row);
-
-  res.status(200).json({ success: true, message: 'Request submitted successfully.' });
-});
-
-// --- Helper Functions to Read/Write to the DB ---
-const readDb = () => {
-  const dbRaw = fs.readFileSync(dbPath);
-  return JSON.parse(dbRaw);
-};
-
-const writeDb = (data) => {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-};
 
 // --- API ROUTES ---
 
+// Login User
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password = $2', [username, password]);
+    if (result.rows.length > 0) {
+      res.json({ success: true, message: 'Login successful' });
+    } else {
+      res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server error');
+  }
+});
+
 // GET: Fetch all vehicles
-app.get('/api/vehicles', (_req, res) => {
-  const db = readDb();
-  res.json(db.vehicles);
+app.get('/api/vehicles', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM vehicles ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server error');
+  }
 });
 
 // GET: Fetch a single vehicle by ID
-app.get('/api/vehicles/:id', (req, res) => {
-  const db = readDb();
-  const vehicle = db.vehicles.find(v => v.id === parseInt(req.params.id));
-  if (!vehicle) {
-    return res.status(404).send('Vehicle not found.');
+app.get('/api/vehicles/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM vehicles WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).send('Vehicle not found.');
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server error');
   }
-  res.json(vehicle);
 });
 
 // POST: Add a new vehicle
-app.post('/api/vehicles', (req, res) => {
-  const db = readDb();
-  const newVehicle = req.body;
-  
-  // Assign a new unique ID
-  newVehicle.id = db.vehicles.length > 0 ? Math.max(...db.vehicles.map(v => v.id)) + 1 : 1;
-  
-  db.vehicles.push(newVehicle);
-  writeDb(db);
-  
-  res.status(201).json(newVehicle);
-});
-
-// PUT: Update an existing vehicle by ID
-app.put('/api/vehicles/:id', (req, res) => {
-    const db = readDb();
-    const vehicleIndex = db.vehicles.findIndex(v => v.id === parseInt(req.params.id));
-
-    if (vehicleIndex === -1) {
-        return res.status(404).send('Vehicle not found.');
-    }
-
-    const updatedVehicle = { ...db.vehicles[vehicleIndex], ...req.body };
-    db.vehicles[vehicleIndex] = updatedVehicle;
-    writeDb(db);
-
-    res.json(updatedVehicle);
+app.post('/api/vehicles', async (req, res) => {
+  const { name, category, price, year, kilometers, fuelType, financeAvailable, images } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO vehicles(name, category, price, year, kilometers, fuelType, financeAvailable, images) VALUES($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [name, category, price, year, kilometers, fuelType, financeAvailable, images]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server error');
+  }
 });
 
 // DELETE: Remove a vehicle by ID
-app.delete('/api/vehicles/:id', (req, res) => {
-    const db = readDb();
-    const vehicleIndex = db.vehicles.findIndex(v => v.id === parseInt(req.params.id));
-
-    if (vehicleIndex === -1) {
+app.delete('/api/vehicles/:id', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM vehicles WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) {
         return res.status(404).send('Vehicle not found.');
     }
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server error');
+  }
+});
 
-    db.vehicles.splice(vehicleIndex, 1);
-    writeDb(db);
-    
-    res.status(204).send(); // No content to send back
+// POST: Save sell requests to CSV (This remains the same)
+app.post('/api/sell-requests', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+    const formData = req.body;
+    const csvPath = path.join(__dirname, 'sell_requests.csv');
+    const headers = 'SellerName,PhoneNumber,Email,Location,VehicleCategory,BrandModel,Year,Kilometers,Condition,ExpectedPrice,Comments\n';
+    const row = `"${formData.sellerName}","${formData.sellerPhone}","${formData.sellerEmail}","${formData.sellerLocation}","${formData.sellCategory}","${formData.sellBrand}","${formData.sellYear}","${formData.sellKM}","${formData.sellCondition}","${formData.expectedPrice}","${formData.additionalComments}"\n`;
+    if (!fs.existsSync(csvPath)) {
+      fs.writeFileSync(csvPath, headers);
+    }
+    fs.appendFileSync(csvPath, row);
+    res.status(200).json({ success: true, message: 'Request submitted successfully.' });
 });
 
 
