@@ -4,22 +4,26 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- DEBUGGING ---
-console.log('DATABASE_URL found:', process.env.DATABASE_URL);
-// --- END DEBUGGING ---
+// --- CONFIGURATIONS ---
 
-// Middleware
-app.use(cors());
+// Cloudinary configuration using environment variables
+cloudinary.config({ 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_API_SECRET 
+});
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Multer configuration for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-// Create a new Pool instance for connecting to the database
+// Database connection setup
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -27,7 +31,34 @@ const pool = new Pool({
   }
 });
 
+// Middleware
+app.use(cors());
+app.use(express.json());
+
 // --- API ROUTES ---
+
+// NEW: Image Upload Endpoint
+app.post('/api/upload', upload.single('vehicleImage'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided.' });
+    }
+    // Upload image to Cloudinary from buffer
+    const result = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream({ resource_type: 'image' }, (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+        });
+        uploadStream.end(req.file.buffer);
+    });
+    
+    res.status(200).json({ imageUrl: result.secure_url });
+  } catch (err) {
+    console.error('Image Upload Error:', err);
+    res.status(500).json({ error: 'Image upload failed.' });
+  }
+});
+
 
 // Login User
 app.post('/api/login', async (req, res) => {
@@ -72,6 +103,7 @@ app.get('/api/vehicles/:id', async (req, res) => {
 
 // POST: Add a new vehicle
 app.post('/api/vehicles', async (req, res) => {
+    // Note: The 'images' URL now comes from the frontend after it uploads to Cloudinary
     const { name, category, price, year, kilometers, fuelType, financeAvailable, images } = req.body;
     try {
         const result = await pool.query(
