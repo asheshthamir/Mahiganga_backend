@@ -37,22 +37,26 @@ app.use(express.json());
 
 // --- API ROUTES ---
 
-// NEW: Image Upload Endpoint
-app.post('/api/upload', upload.single('vehicleImage'), async (req, res) => {
+// NEW: Multi-Image Upload Endpoint
+app.post('/api/upload', upload.array('vehicleImages', 5), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No image file provided.' });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No image files provided.' });
     }
-    // Upload image to Cloudinary from buffer
-    const result = await new Promise((resolve, reject) => {
+
+    const uploadPromises = req.files.map(file => {
+      return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream({ resource_type: 'image' }, (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
+          if (error) reject(error);
+          else resolve(result.secure_url);
         });
-        uploadStream.end(req.file.buffer);
+        uploadStream.end(file.buffer);
+      });
     });
-    
-    res.status(200).json({ imageUrl: result.secure_url });
+
+    const imageUrls = await Promise.all(uploadPromises);
+    res.status(200).json({ imageUrls: imageUrls }); // Returns an array of URLs
+
   } catch (err) {
     console.error('Image Upload Error:', err);
     res.status(500).json({ error: 'Image upload failed.' });
